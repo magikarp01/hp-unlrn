@@ -1,0 +1,158 @@
+[W 2024-01-08 23:42:12.799 ServerApp] A `_jupyter_server_extension_points` function was not found in jupyter_lsp. Instead, a `_jupyter_server_extension_paths` function was found and will be used for now. This function name will be deprecated in future releases of Jupyter Server.
+[W 2024-01-08 23:42:13.265 ServerApp] A `_jupyter_server_extension_points` function was not found in notebook_shim. Instead, a `_jupyter_server_extension_paths` function was found and will be used for now. This function name will be deprecated in future releases of Jupyter Server.
+[I 2024-01-08 23:42:13.266 ServerApp] jupyter_lsp | extension was successfully linked.
+[I 2024-01-08 23:42:13.271 ServerApp] jupyter_server_terminals | extension was successfully linked.
+[W 2024-01-08 23:42:13.274 ServerApp] jupyterlab | error linking extension: Trait, kernel_name, not found.
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/extension/manager.py", line 345, in link_extension
+        extension.link_all_points(self.serverapp)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/extension/manager.py", line 227, in link_all_points
+        self.link_point(point_name, serverapp)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/extension/manager.py", line 217, in link_point
+        point.link(serverapp)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/extension/manager.py", line 139, in link
+        linker(serverapp)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/extension/application.py", line 403, in _link_jupyter_server_extension
+        self.update_config(self.serverapp.config)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/notebook_shim/shim.py", line 141, in update_config
+        shimmed_config = self.shim_config_from_notebook_to_jupyter_server(
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/notebook_shim/shim.py", line 232, in shim_config_from_notebook_to_jupyter_server
+        raise TraitError("Trait, {}, not found.".format(trait_name))
+    traitlets.traitlets.TraitError: Trait, kernel_name, not found.
+[I 2024-01-08 23:42:13.281 ServerApp] notebook | extension was successfully linked.
+[I 2024-01-08 23:42:13.742 ServerApp] notebook_shim | extension was successfully linked.
+[I 2024-01-08 23:42:13.777 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2024-01-08 23:42:13.779 ServerApp] jupyter_lsp | extension was successfully loaded.
+[I 2024-01-08 23:42:13.780 ServerApp] jupyter_server_terminals | extension was successfully loaded.
+[I 2024-01-08 23:42:13.784 LabApp] JupyterLab extension loaded from /data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyterlab
+[I 2024-01-08 23:42:13.784 LabApp] JupyterLab application directory is /data/phillip_guo/miniconda3/envs/hp-unlrn/share/jupyter/lab
+[I 2024-01-08 23:42:13.785 LabApp] Extension Manager is 'pypi'.
+[I 2024-01-08 23:42:13.787 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2024-01-08 23:42:13.791 ServerApp] notebook | extension was successfully loaded.
+[I 2024-01-08 23:42:13.791 ServerApp] Serving notebooks from local directory: /data/phillip_guo/hp-unlrn
+[I 2024-01-08 23:42:13.791 ServerApp] Jupyter Server 2.12.2 is running at:
+[I 2024-01-08 23:42:13.791 ServerApp] http://compute-permanent-node-587:8888/tree?token=911d88f72962f7fe635a9a86d266f70bf9905225e519f54f
+[I 2024-01-08 23:42:13.791 ServerApp]     http://127.0.0.1:8888/tree?token=911d88f72962f7fe635a9a86d266f70bf9905225e519f54f
+[I 2024-01-08 23:42:13.791 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[C 2024-01-08 23:42:13.805 ServerApp] 
+    
+    To access the server, open this file in a browser:
+        file:///data/phillip_guo/.local/share/jupyter/runtime/jpserver-104663-open.html
+    Or copy and paste one of these URLs:
+        http://compute-permanent-node-587:8888/tree?token=911d88f72962f7fe635a9a86d266f70bf9905225e519f54f
+        http://127.0.0.1:8888/tree?token=911d88f72962f7fe635a9a86d266f70bf9905225e519f54f
+[I 2024-01-08 23:42:14.221 ServerApp] Skipped non-installed server(s): bash-language-server, dockerfile-language-server-nodejs, javascript-typescript-langserver, jedi-language-server, julia-language-server, pyright, python-language-server, python-lsp-server, r-languageserver, sql-language-server, texlab, typescript-language-server, unified-language-server, vscode-css-languageserver-bin, vscode-html-languageserver-bin, vscode-json-languageserver-bin, yaml-language-server
+[W 2024-01-08 23:43:56.065 ServerApp] 404 GET /hub/api (@172.16.0.238) 21.72ms referer=None
+[I 2024-01-08 23:43:56.137 JupyterNotebookApp] 302 GET /tree? (@172.16.0.238) 0.41ms
+[W 2024-01-08 23:43:58.237 ServerApp] 404 GET /hub/api (@172.16.0.238) 2.59ms referer=None
+[I 2024-01-08 23:43:58.399 JupyterNotebookApp] 302 GET /tree? (@172.16.0.238) 0.34ms
+[W 2024-01-08 23:44:39.451 ServerApp] 404 GET /hub/api (@172.16.0.238) 2.75ms referer=None
+[I 2024-01-08 23:44:39.538 JupyterNotebookApp] 302 GET /tree? (@172.16.0.238) 0.52ms
+[W 2024-01-08 23:44:39.626 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:44:39.630 ServerApp] 403 GET /api/kernelspecs?1704757479561 (@172.16.0.238) 3.45ms referer=None
+[W 2024-01-08 23:44:39.630 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:44:39.631 ServerApp] 403 GET /api/kernels?1704757479563 (@172.16.0.238) 0.82ms referer=None
+[W 2024-01-08 23:44:39.632 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:44:39.632 ServerApp] 403 GET /api/kernels?1704757479571 (@172.16.0.238) 0.88ms referer=None
+[W 2024-01-08 23:44:39.633 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:44:39.633 ServerApp] 403 GET /api/sessions?1704757479574 (@172.16.0.238) 1.65ms referer=None
+[W 2024-01-08 23:44:39.648 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:44:39.649 ServerApp] 403 GET /api/kernelspecs?1704757479637 (@172.16.0.238) 1.11ms referer=None
+[W 2024-01-08 23:45:21.157 ServerApp] 404 GET /hub/api (@172.16.0.238) 2.82ms referer=None
+[I 2024-01-08 23:45:21.162 JupyterNotebookApp] 302 GET /tree? (@172.16.0.238) 0.56ms
+[W 2024-01-08 23:45:23.070 ServerApp] 404 GET /hub/api (@172.16.0.238) 2.59ms referer=None
+[I 2024-01-08 23:45:23.074 JupyterNotebookApp] 302 GET /tree? (@172.16.0.238) 0.53ms
+[I 2024-01-08 23:45:36.392 ServerApp] Kernel started: 72f296a5-fb6c-44eb-9cab-d2db423c9936
+[I 2024-01-08 23:45:37.134 ServerApp] Connecting to kernel 72f296a5-fb6c-44eb-9cab-d2db423c9936.
+[W 2024-01-08 23:45:37.344 ServerApp] 404 GET /hub/api (@172.16.0.238) 1.09ms referer=None
+[I 2024-01-08 23:45:37.481 JupyterNotebookApp] 302 GET /tree? (@172.16.0.238) 0.37ms
+[W 2024-01-08 23:45:37.532 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:45:37.533 ServerApp] 403 GET /api/kernelspecs?1704757537510 (@172.16.0.238) 1.24ms referer=None
+[W 2024-01-08 23:45:37.534 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:45:37.534 ServerApp] 403 GET /api/kernels?1704757537511 (@172.16.0.238) 0.73ms referer=None
+[W 2024-01-08 23:45:37.535 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:45:37.535 ServerApp] 403 GET /api/kernels?1704757537522 (@172.16.0.238) 0.87ms referer=None
+[W 2024-01-08 23:45:37.536 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:45:37.536 ServerApp] 403 GET /api/sessions?1704757537524 (@172.16.0.238) 1.66ms referer=None
+[W 2024-01-08 23:45:37.546 ServerApp] wrote error: 'Forbidden'
+    Traceback (most recent call last):
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 1784, in _execute
+        result = method(*self.path_args, **self.path_kwargs)
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/tornado/web.py", line 3278, in wrapper
+        url = self.get_login_url()
+      File "/data/phillip_guo/miniconda3/envs/hp-unlrn/lib/python3.10/site-packages/jupyter_server/base/handlers.py", line 762, in get_login_url
+        raise web.HTTPError(403)
+    tornado.web.HTTPError: HTTP 403: Forbidden
+[W 2024-01-08 23:45:37.547 ServerApp] 403 GET /api/kernelspecs?1704757537537 (@172.16.0.238) 1.22ms referer=None
