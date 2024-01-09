@@ -16,3 +16,4 @@ nnsight
 transformer_lens
 pytest
 scikit-learn
+pandas
