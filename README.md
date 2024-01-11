@@ -15,3 +15,5 @@ lm_eval --model hf \
     --tasks hellaswag \
     --device cuda:0 \
     --batch_size 16
+
+for filtering with 70b, need sentencepiece
