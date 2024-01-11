@@ -61,9 +61,9 @@ def augment_datapoints(datapoints, num_new_datapoints, model="gpt-4-1106-preview
 
 # Example usage
 # load list of dictionaries from jsonl file
-with open("HP_TRIVIA.jsonl", "r") as infile:
+with open("harry_potter_trivia_1000.jsonl", "r") as infile:
     HP_TRIVIA = [json.loads(line) for line in infile]
 
-augmented_datapoints = augment_datapoints(HP_TRIVIA, 55, verbose=True)
+augmented_datapoints = augment_datapoints(HP_TRIVIA, 500, verbose=True, save_path="harry_potter_trivia_1000.jsonl")
 
 # %%
