@@ -8,7 +8,7 @@ datasets
 einops
 seaborn
 fancy_einsum
-charset-normalizer==3.1.0
+charset-normalizer
 detoxify
 cmapy
 notebook
@@ -17,3 +17,5 @@ transformer_lens
 pytest
 scikit-learn
 pandas
+levenshtein
+concept-erasure
