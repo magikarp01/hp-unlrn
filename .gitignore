@@ -1,2 +1,3 @@
 jupyter_logs/
 Llama-2-*/*
+.env
