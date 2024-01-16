@@ -37,7 +37,6 @@ import random
 from itertools import chain
 from pathlib import Path
 import matplotlib.pyplot as plt
-import os
 import numpy as np
 
 import datasets
@@ -65,6 +64,7 @@ from accelerate import Accelerator, DistributedType
 from accelerate.logging import get_logger
 # from accelerate.utils import DummyOptim
 # from accelerate.utils import DummyScheduler, set_seed
+from torch.utils.data import Dataset
 
 def set_seed(seed):
     if seed is not None:
@@ -142,13 +142,13 @@ def parse_args():
     parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
-        default=8,
+        default=1,
         help="Batch size (per device) for the training dataloader.",
     )
     parser.add_argument(
         "--per_device_eval_batch_size",
         type=int,
-        default=8,
+        default=1,
         help="Batch size (per device) for the evaluation dataloader.",
     )
     parser.add_argument(
@@ -292,6 +292,7 @@ def evaluate(args, model, eval_dataloader, accelerator, eval_dataset):
     model.eval()
     losses = []
     for step, batch in enumerate(eval_dataloader):
+        
         with torch.no_grad():
             outputs = model(**batch)
 
@@ -309,6 +310,10 @@ def evaluate(args, model, eval_dataloader, accelerator, eval_dataset):
 
 def main():
     args = parse_args()
+
+    import os
+    os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
@@ -363,97 +368,28 @@ def main():
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
 
-    # Downloading and loading a dataset from the hub.
-    #raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
-    # dataset = load_from_disk(f"./data/{args.dataset_name}.hf")
-    # # Replace the existing dataset loading code
-    # dataset = load_from_disk(f"./data/{args.dataset_name}.hf")
 
     # ... with loading the preprocessed data
-    import numpy as np
-    from torch.utils.data import Dataset, DataLoader
-
-    # class TextDataset(Dataset):
-    #     def __init__(self, tokenized_texts):
-    #         # Ensure the input is converted to a list of arrays if it's a NumPy array
-    #         if isinstance(tokenized_texts, np.ndarray):
-    #             self.tokenized_texts = [tokenized_texts[i] for i in range(tokenized_texts.shape[0])]
-    #         else:
-    #             self.tokenized_texts = tokenized_texts
-
-    #     def __len__(self):
-    #         return len(self.tokenized_texts)
-
-    #     # def __getitem__(self, idx):
-    #     #     # Convert the selected array to a torch tensor
-    #     #     return torch.tensor(self.tokenized_texts[idx], dtype=torch.long)
-
-    #     def __getitem__(self, idx):
-    #         input_ids = torch.tensor(self.tokenized_texts[idx], dtype=torch.long)
-    #         return {"input_ids": input_ids}
-
-    # from torch.nn.utils.rnn import pad_sequence
-    # from torch.utils.data import DataLoader
-
-    # class TextDataset(Dataset):
-    #     def __init__(self, tokenized_texts, pad_token_id=0):
-    #         # Convert the entire dataset to tensors upfront for memory efficiency
-    #         if isinstance(tokenized_texts, np.ndarray):
-    #             self.tokenized_texts = [torch.tensor(text, dtype=torch.long) for text in tokenized_texts]
-    #         else:
-    #             self.tokenized_texts = [torch.tensor(text, dtype=torch.long) for text in tokenized_texts]
-    #         self.pad_token_id = pad_token_id
-
-    #     def __len__(self):
-    #         return len(self.tokenized_texts)
-
-    #     def __getitem__(self, idx):
-    #         return self.tokenized_texts[idx]
-
-    # # Collate function to handle padding
-    # def collate_fn(batch, pad_token_id=0):
-    #     input_ids = pad_sequence(batch, batch_first=True, padding_value=pad_token_id)
-    #     attention_mask = (input_ids != pad_token_id).long()
-    #     return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-
-    from torch.utils.data import Dataset
-    import torch
-    from torch.nn.utils.rnn import pad_sequence
 
     class TextDataset(Dataset):
-        def __init__(self, tokenized_texts):
-            # Convert the entire dataset to tensors upfront for memory efficiency
-            if isinstance(tokenized_texts, np.ndarray):
-                self.tokenized_texts = [torch.tensor(text, dtype=torch.long) for text in tokenized_texts]
-            else:
-                self.tokenized_texts = [torch.tensor(text, dtype=torch.long) for text in tokenized_texts]
+        def __init__(self, tokenized_chunks):
+            self.tokenized_chunks = tokenized_chunks
+
+        def __getitem__(self, idx):
+            # Retrieve a single tokenized chunk
+            tokenized_chunk = self.tokenized_chunks[idx]
+
+            # Prepare the input_ids and labels for autoregressive modeling
+            input_ids = tokenized_chunk[:-1]
+            labels = tokenized_chunk[1:]
+
+            return {
+                "input_ids": torch.tensor(input_ids, dtype=torch.long),
+                "labels": torch.tensor(labels, dtype=torch.long)
+            }
 
         def __len__(self):
-            return len(self.tokenized_texts)
-
-        # def __getitem__(self, idx):
-        #     return self.tokenized_texts[idx]
-        def __getitem__(self, idx):
-            item = self.tokenized_texts[idx]
-            if isinstance(item, list):
-                item = torch.tensor(item, dtype=torch.long)
-            return item
-
-
-    def collate_fn(batch, pad_token_id=0):
-        input_ids = pad_sequence(batch, batch_first=True, padding_value=pad_token_id)
-        attention_mask = (input_ids != pad_token_id).long()
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-    # Usage with DataLoader
-    # dataset = TextDataset(your_tokenized_data)
-    # data_loader = DataLoader(dataset, batch_size=your_batch_size, collate_fn=lambda x: collate_fn(x, pad_token_id=tokenizer.pad_token_id))
-
-
-    # Usage with DataLoader
-
-
+            return len(self.tokenized_chunks)
 
     # Load the preprocessed chunks
     chunks = np.load("datasets/ms_harrypotter_data/rawdata_chunkedtokenized.npy", allow_pickle=True)
@@ -463,19 +399,26 @@ def main():
     model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", cache_dir='/ext_usb', torch_dtype=torch.bfloat16)
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
-    # max_id = max([max(seq['input_ids']) for seq in dataset])
-    # min_id = min([min(seq['input_ids']) for seq in dataset])
-
-    # if max_id >= tokenizer.vocab_size:
-    #     print(f"Found out-of-range token ID: {max_id}")
-    #     print(f"min_id: {min_id}")
-
 
     model.resize_token_embeddings(len(tokenizer))
-    padding_token_id = tokenizer.pad_token_id  # This should be within the valid range
-    dataset = [[padding_token_id if token_id == 32000 else token_id for token_id in sequence] for sequence in dataset]
+    # padding_token_id = tokenizer.pad_token_id  # This should be within the valid range
+    padding_token_id = tokenizer.bos_token_id
+    
+    # dataset = [[padding_token_id if token_id == 32000 else token_id for token_id in sequence] for sequence in dataset]
 
+    def collate_fn(batch):
+        max_length = max(len(item['input_ids']) for item in batch)
+        padded_input_ids = [torch.cat([item['input_ids'], torch.tensor([padding_token_id] * (max_length - len(item['input_ids'])), dtype=torch.long)]) for item in batch]
+        padded_labels = [torch.cat([item['labels'], torch.tensor([padding_token_id] * (max_length - len(item['labels'])), dtype=torch.long)]) for item in batch]
+        
+        batched_input_ids = torch.stack(padded_input_ids)
+        batched_labels = torch.stack(padded_labels)
 
+        # check that all of the tokens are within the valid range
+        
+        assert torch.all(batched_input_ids < len(tokenizer))
+
+        return {"input_ids": batched_input_ids, "labels": batched_labels}
 
 
     # Split dataset into training and validation sets if needed
@@ -483,83 +426,17 @@ def main():
     val_size = len(dataset) - train_size
     train_dataset, eval_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
-
-    # columns_to_keep = ['input_ids', 'labels']    
-    # columns_to_remove = set(dataset.column_names) - set(columns_to_keep)
-    # dataset = dataset.remove_columns(list(columns_to_remove))
-    # dataset.set_format(type='torch', columns=['input_ids', 'labels'])
-
-    # def convert_to_long(batch):
-    #     batch['input_ids'] = torch.tensor(batch['input_ids'], dtype=torch.long)
-    #     return batch
-    # dataset = dataset.map(convert_to_long)
-
-    # dataset = dataset.train_test_split(test_size=0.05)
-    # dataset["validation"] = dataset["test"]
-
-    # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
-
-    # Load pretrained model and tokenizer
-    #
-    # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
-    # download model & vocab.
-    # if args.config_name:
-    #     config = AutoConfig.from_pretrained(args.config_name)
-    # elif args.model_name_or_path:
-    #     config = AutoConfig.from_pretrained(args.model_name_or_path)
-    # else:
-    #     config = CONFIG_MAPPING[args.model_type]()
-    #     logger.warning("You are instantiating a new config instance from scratch.")
-
-    # if args.tokenizer_name:
-    #     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=not args.use_slow_tokenizer)
-    # elif args.model_name_or_path:
-    #     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer)
-    # else:
-    #     raise ValueError(
-    #         "You are instantiating a new tokenizer from scratch. This is not supported by this script."
-    #         "You can do it from another script, save it, and load it from here, using --tokenizer_name."
-    #     )
-
-    # if args.model_name_or_path:
-    #     model = AutoModelForCausalLM.from_pretrained(
-    #         args.model_name_or_path,
-    #         from_tf=bool(".ckpt" in args.model_name_or_path),
-    #         config=config,
-    #     )
-    # else:
-    #     logger.info("Training new model from scratch")
-    #     model = AutoModelForCausalLM.from_config(config)
-
-    # replaced above with below
-
-
-    
-    # train_dataset = dataset["train"]
-    # eval_dataset = dataset["validation"]
-
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), min(3, len(train_dataset))):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
 
     # DataLoaders creation:
-    # train_dataloader = DataLoader(
-    #     train_dataset, shuffle=True, batch_size=args.per_device_train_batch_size
-    # )
-    # eval_dataloader = DataLoader(
-    #     eval_dataset, batch_size=args.per_device_eval_batch_size
-    # )
-    # DataLoaders creation:
-
-    # data_loader = DataLoader(dataset, batch_size=your_batch_size, collate_fn=lambda x: collate_fn(x, pad_token_id=tokenizer.pad_token_id))
-
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, batch_size=args.per_device_train_batch_size, collate_fn=lambda x: collate_fn(x, pad_token_id=tokenizer.pad_token_id)
+        train_dataset, shuffle=True, batch_size=args.per_device_train_batch_size, collate_fn=collate_fn
     )
     eval_dataloader = DataLoader(
-        eval_dataset, batch_size=args.per_device_eval_batch_size, collate_fn=lambda x: collate_fn(x, pad_token_id=tokenizer.pad_token_id)
+        eval_dataset, batch_size=args.per_device_eval_batch_size, collate_fn=collate_fn
     )
 
 
@@ -576,14 +453,7 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    # New Code #
-    # Creates Dummy Optimizer if `optimizer` was specified in the config file else creates Adam Optimizer
-    # optimizer_cls = (
-    #     torch.optim.AdamW
-    #     if accelerator.state.deepspeed_plugin is None
-    #     or "optimizer" not in accelerator.state.deepspeed_plugin.deepspeed_config
-    #     else DummyOptim
-    # )
+
     # Modified code
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, betas=(args.beta1, args.beta2), lr=args.learning_rate)
     # optimizer = optimizer_cls(optimizer_grouped_parameters, betas=(args.beta1, args.beta2), lr=args.learning_rate)
@@ -600,23 +470,6 @@ def main():
         overrode_max_train_steps = True
     else:
         args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
-
-    # New Code #
-    # Creates Dummy Scheduler if `scheduler` was specified in the config file else creates `args.lr_scheduler_type` Scheduler
-    # if (
-    #     accelerator.state.deepspeed_plugin is None
-    #     or "scheduler" not in accelerator.state.deepspeed_plugin.deepspeed_config
-    # ):
-    #     lr_scheduler = get_scheduler(
-    #         name=args.lr_scheduler_type,
-    #         optimizer=optimizer,
-    #         num_warmup_steps=args.num_warmup_steps,
-    #         num_training_steps=args.max_train_steps,
-    #     )
-    # else:
-    #     lr_scheduler = DummyScheduler(
-    #         optimizer, total_num_steps=args.max_train_steps, warmup_num_steps=args.num_warmup_steps
-    #     )
 
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
@@ -705,6 +558,7 @@ def main():
         if args.resume_from_checkpoint:
             train_dataloader = accelerator.skip_first_batches(train_dataloader, num_batches=resume_step)
         for step, batch in enumerate(train_dataloader):
+            
             # In particular, DeepSpeed handles `gradient_accumulation` via `DeepSpeedEngine`.
             # Below, we use `accelerator.accumulate` if the user
             # wants to switch to other approaches such as plain DDP, PyTorch FSDP ...
