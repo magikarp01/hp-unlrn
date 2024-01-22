@@ -181,7 +181,7 @@ def parse_args():
     parser.add_argument(
         "--gradient_accumulation_steps",
         type=int,
-        default=1,
+        default=10,
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
     parser.add_argument(
