@@ -221,3 +221,64 @@ def get_adversarial_trivia_performance(regular_model, hp_model, tokenizer, n_ite
         plt.show()
 
     return summary_styles_df, text_lines_df, dan_prompts_df, unlrn_prompts_df
+
+
+from tasks import HPTriviaTask
+import matplotlib.pyplot as plt
+import numpy as np
+
+def side_effect_testing(regular_model, unlrn_model, tokenizer, data_sources=None, display_bar=True, n_iters=2, randomize_answers=True):
+    if data_sources is None:
+        data_sources = {
+            "british_mythology": "tasks/hp/data/side_effects/british_mythology.jsonl",
+            "dungeons_and_dragons": "tasks/hp/data/side_effects/dungeons_and_dragons.jsonl",
+            "lord_of_the_rings": "tasks/hp/data/side_effects/lord_of_the_rings.jsonl",
+            "wizard_of_oz": "tasks/hp/data/side_effects/wizard_of_oz.jsonl"
+        }
+
+    # Initialize lists to store losses and accuracies
+    llama_losses = []
+    hp_losses = []
+    llama_accuracies = []
+    hp_accuracies = []
+
+    for name, data_location in tqdm(data_sources.items()):
+        trivia = HPTriviaTask(batch_size=25, tokenizer=tokenizer, device='cuda', chat_model=True, train_data_location=data_location, test_data_location=data_location, randomize_answers=randomize_answers)
+        
+        # Store losses and accuracies instead of printing
+        llama_losses.append(trivia.get_test_loss(regular_model, n_iters=n_iters).item())
+        hp_losses.append(trivia.get_test_loss(unlrn_model, n_iters=n_iters).item())
+        llama_accuracies.append(trivia.get_test_accuracy(regular_model, use_test_data=False, check_all_logits=False, n_iters=n_iters))
+        hp_accuracies.append(trivia.get_test_accuracy(unlrn_model, use_test_data=False, check_all_logits=False, n_iters=n_iters))
+    
+    if display_bar:
+        # Create bar plots
+        labels = list(data_sources.keys())
+        x = np.arange(len(labels))  # the label locations
+        width = 0.35  # the width of the bars
+
+        fig, ax = plt.subplots(2, 1, figsize=(10, 10))
+
+        # Add data to subplots
+        ax[0].bar(x - width/2, llama_losses, width, label='Llama', color='red')
+        ax[0].bar(x + width/2, hp_losses, width, label='HP', color='blue')
+        ax[1].bar(x - width/2, llama_accuracies, width, label='Llama', color='red')
+        ax[1].bar(x + width/2, hp_accuracies, width, label='HP', color='blue')
+
+        # Add some text for labels, title and custom x-axis tick labels, etc.
+        ax[0].set_ylabel('Losses')
+        ax[0].set_title('Losses by model and data source')
+        ax[0].set_xticks(x)
+        ax[0].set_xticklabels(labels)
+        ax[0].legend()
+
+        ax[1].set_ylabel('Accuracies')
+        ax[1].set_title('Accuracies by model and data source')
+        ax[1].set_xticks(x)
+        ax[1].set_xticklabels(labels)
+        ax[1].legend()
+
+        fig.tight_layout()
+        plt.show()
+    
+    return llama_losses, hp_losses, llama_accuracies, hp_accuracies
