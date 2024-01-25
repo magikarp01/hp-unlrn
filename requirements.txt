@@ -21,3 +21,7 @@ levenshtein
 concept-erasure
 dropbox
 python-dotenv
+openai
+trl
+peft
+bitsandbytes
