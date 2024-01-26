@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from tasks.hp.HPSAQ import HPSAQ
 from tasks.hp.HPTask import HPTriviaTask
-from tasks.hp.HPAdversarialTask import HPSAQAdversarialTask
+from tasks.hp.HPAdversarialTask import HPSAQAdversarialTask, BASELINE_UNLRN_PROMPTS
 from tasks.hp.HPTranslatedTask import HPSAQSpanishTask, HPTriviaSpanishTask, HPSAQRussianTask, HPTriviaRussianTask
 
 load_dotenv()
@@ -36,7 +36,7 @@ print('Models loaded')
 clear_gpu(hp_model)
 clear_gpu(llama_model)
 
-def run_task(task_name, task, model, n_iterations=100):
+def run_task(task_name, task, model):
 
     # check if the word Trivia is contained in the name
     if 'Trivia' in task_name:
@@ -44,10 +44,10 @@ def run_task(task_name, task, model, n_iterations=100):
             model=model.cuda(),
             use_test_data=False,
             check_all_logits=False,
-            n_iters=n_iterations,
+            # n_iters=n_iterations,
         )
     elif 'SAQ' in task_name:
-        task.generate_responses(model.cuda(), tokenizer, eval_onthe_fly=True, eval_model='gpt-3.5-turbo', n_questions=n_iterations, verbose=False)
+        task.generate_responses(model.cuda(), tokenizer, eval_onthe_fly=True, eval_model='gpt-4', verbose=False)
         score = task.get_accuracies()
     else:
         raise Exception('Task name not recognized')
@@ -55,81 +55,52 @@ def run_task(task_name, task, model, n_iterations=100):
     return score
 
 score_dict = {}
-with open('19jan_hpsaq_translated_scores_100dps.json', 'w') as f:
+from datetime import datetime
+exp_time = datetime.now().strftime("%b%d-%H%M-%S")
+save_path = f"/ext_usb/Desktop/mats/hp-unlrn/aengus_testing/garbage/{exp_time}.json"
+with open(save_path, 'w') as f:
     json.dump(score_dict, f)
 
-for model_name, model in [('hp_model', hp_model), ('llama_model', llama_model)]:
-    clear_gpu(hp_model)
-    clear_gpu(llama_model)
-    score_dict[model_name] = {}
-    for task_name, task_object in [('HPSAQ', HPSAQ), ('HPSAQSpanish', HPSAQSpanishTask), ('HPSAQRussian', HPSAQRussianTask), ('HPTrivia', HPTriviaTask), ('HPTriviaSpanish', HPTriviaSpanishTask), ('HPTriviaRussian', HPTriviaRussianTask)]: 
+def run_all_tasks(save_path):
+    for model_name, model in [('hp_model', hp_model), ('llama_model', llama_model)]:
+        clear_gpu(hp_model)
+        clear_gpu(llama_model)
+        score_dict[model_name] = {}
 
-        if 'Trivia' in task_name:
-            task = task_object(
-                batch_size=1,
-                tokenizer=tokenizer,
-                device='cuda',
-                chat_model=True,
-                randomize_answers=True,
+        print(f"Running {model_name} on all tasks")
+
+        for task_name, task_object in [('HPSAQ', HPSAQ), ('HPSAQSpanish', HPSAQSpanishTask), ('HPSAQRussian', HPSAQRussianTask), ("HPAdversarialTask", HPSAQAdversarialTask), ]: 
+
+            if 'Trivia' in task_name:
+                task = task_object(
+                    batch_size=1,
+                    tokenizer=tokenizer,
+                    device='cuda',
+                    chat_model=True,
+                    randomize_answers=True,
+                )
+            elif 'SAQ' in task_name:
+                task = task_object()
+            elif "Adversarial" in task_name:
+                for unlearn_idx, unlearn_prompt in enumerate(BASELINE_UNLRN_PROMPTS):
+                    task=task_object(
+                        baseline_unlrn_index=unlearn_idx,
+                    )
+            else:
+                raise Exception('Task name not recognized')
+
+            print('task name:', task_name)
+            score = run_task(
+                task_name=task_name,
+                task=task,
+                model=model,
+                # n_iterations=100,
             )
-        elif 'SAQ' in task_name:
-            task = task_object()
-        else:
-            raise Exception('Task name not recognized')
-
-        print('task name:', task_name)
-        score = run_task(
-            task_name=task_name,
-            task=task,
-            model=model,
-            n_iterations=100,
-        )
-        print(f'---------------------\n\n\n{model_name} {task_name} score: {score}\n\n\n---------------------')
-        score_dict[model_name][task_name] = score
+            print(f'---------------------\n\n\n{model_name} {task_name} score: {score}\n\n\n---------------------')
+            score_dict[model_name][task_name] = score
 
 
-with open('19jan_hpsaq_translated_scores_100dps.json', 'w') as f:
-    json.dump(score_dict, f)
+            with open(save_path, 'w') as f:
+                json.dump(score_dict, f)
 
-
-
-# print('Tasks loaded')
-# hp_task = HPSAQAdversarialTask(summary_long=True)
-# run_task(hp_task)
-# print('Task 1 done')
-# hp_task= HPSAQAdversarialTask(summary_short=True)
-# run_task(hp_task)
-# print('Task 2 done')
-# hp_task = HPSAQAdversarialTask(verbatim=True)
-# run_task(hp_task)
-# print('Task 3 done')
-# hp_task = HPSAQAdversarialTask(dan_index=0)
-# run_task(hp_task)
-# print('Task 4 done')
-# hp_task = HPSAQAdversarialTask(dan_index=1)
-# run_task(hp_task)
-# print('Task 5 done')
-# hp_task = HPSAQAdversarialTask(dan_index=2)
-# run_task(hp_task)
-# print('Task 6 done')
-# hp_task = HPSAQAdversarialTask(baseline_unlrn_index=0)
-# run_task(hp_task)
-# print('Task 7 done')
-# hp_task = HPSAQAdversarialTask(baseline_unlrn_index=1)
-# run_task(hp_task)
-# print('Task 8 done')
-# hp_task = HPSAQAdversarialTask(baseline_unlrn_index=2)
-# run_task(hp_task)
-# print('Task 9 done')
-# hp_task = HPSAQAdversarialTask(gcg_index=0)
-# run_task(hp_task)
-# print('Task 10 done')
-# hp_task = HPSAQAdversarialTask(gcg_index=1)
-# run_task(hp_task)
-# print('Task 11 done')
-# hp_task = HPSAQAdversarialTask(gcg_index=2)
-# run_task(hp_task)
-# # print('Task 12 done')
-# hp_task = HPSAQAdversarialTask(baseline=True)
-# run_task(hp_task)
-# print('Task 13 done')
+run_all_tasks(save_path)
