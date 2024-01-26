@@ -295,6 +295,119 @@ LOSS_FNS = {
     "causal_lm_loss": causal_lm_loss,
 }
 
+class PeftDPOWrapper(torch.nn.Module):
+    def __init__(self, base_model, lora_config):
+        self.base_model = base_model
+        self.lora_model = get_peft_model(base_model, lora_config)
+
+        self.beta = 0.1
+        self.loss_type = "sigmoid"
+        self.label_smoothing = 0
+    
+    def forward(self, *args, **kwargs):
+        if "chosen_input_ids" in kwargs and "rejected_input_ids" in kwargs:
+            # concatenate the chosen and rejected input ids
+            batch_size = kwargs["chosen_input_ids"].shape[0]
+            
+            input_ids = torch.cat([kwargs["chosen_input_ids"], kwargs["rejected_input_ids"]], dim=0)
+
+            labels = input_ids.clone()[:, 1:]
+            input_ids = input_ids[:, :-1]
+
+            policy_logits = self.base_model(input_ids=input_ids).logits
+            reference_logits = self.lora_model(input_ids=input_ids).logits
+
+        else:
+            return self.lora_model(*args, **kwargs)
+
+def dpo_loss(
+    self,
+    policy_chosen_logps: torch.FloatTensor,
+    policy_rejected_logps: torch.FloatTensor,
+    reference_chosen_logps: torch.FloatTensor,
+    reference_rejected_logps: torch.FloatTensor,
+
+    beta: float = 0.1,
+    loss_type: str = "sigmoid",
+    label_smoothing: float = 0,
+
+    reference_free: bool = False,
+) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
+    """Compute the DPO loss for a batch of policy and reference model log probabilities.
+    Adapted from https://github.com/huggingface/trl/blob/v0.7.10/trl/trainer/dpo_trainer.py#L64
+
+    Args:
+        policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
+        policy_rejected_logps: Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
+        reference_chosen_logps: Log probabilities of the reference model for the chosen responses. Shape: (batch_size,)
+        reference_rejected_logps: Log probabilities of the reference model for the rejected responses. Shape: (batch_size,)
+        reference_free: If True, we ignore the _provided_ reference model and implicitly use a reference model that assigns equal probability to all responses.
+
+    Returns:
+        A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
+        The losses tensor contains the DPO loss for each example in the batch.
+        The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
+    """
+    pi_logratios = policy_chosen_logps - policy_rejected_logps
+    if reference_free:
+        ref_logratios = 0
+    else:
+        ref_logratios = reference_chosen_logps - reference_rejected_logps
+
+    device = pi_logratios.device
+
+    ref_logratios = ref_logratios.to(device)
+    logits = pi_logratios - ref_logratios
+
+    # The beta is a temperature parameter for the DPO loss, typically something in the range of 0.1 to 0.5.
+    # We ignore the reference model as beta -> 0. The label_smoothing parameter encodes our uncertainty about the labels and
+    # calculates a conservative DPO loss.
+    if loss_type == "sigmoid":
+        losses = (
+            -F.logsigmoid(beta * logits) * (1 - label_smoothing)
+            - F.logsigmoid(-beta * logits) * label_smoothing
+        )
+    elif loss_type == "hinge":
+        losses = torch.relu(1 - beta * logits)
+    elif loss_type == "ipo":
+        # eqn (17) of the paper where beta is the regularization parameter for the IPO loss, denoted by tau in the paper.
+        losses = (logits - 1 / (2 * beta)) ** 2
+    elif loss_type == "kto_pair":
+        # eqn (7) of the HALOs paper
+        chosen_KL = (policy_chosen_logps - reference_chosen_logps).mean().clamp(min=0)
+        rejected_KL = (policy_rejected_logps - reference_rejected_logps).mean().clamp(min=0)
+
+        chosen_logratios = policy_chosen_logps - reference_chosen_logps
+        rejected_logratios = policy_rejected_logps - reference_rejected_logps
+        # As described in the KTO report, the KL term for chosen (rejected) is estimated using the rejected (chosen) half.
+        losses = torch.cat(
+            (
+                1 - F.sigmoid(beta * (chosen_logratios - rejected_KL)),
+                1 - F.sigmoid(beta * (chosen_KL - rejected_logratios)),
+            ),
+            0,
+        )
+    else:
+        raise ValueError(
+            f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge', 'ipo', 'kto_pair']"
+        )
+
+    chosen_rewards = (
+        beta
+        * (
+            policy_chosen_logps.to(device) - reference_chosen_logps.to(device)
+        ).detach()
+    )
+    rejected_rewards = (
+        beta
+        * (
+            policy_rejected_logps.to(device)
+            - reference_rejected_logps.to(device)
+        ).detach()
+    )
+
+    return losses, chosen_rewards, rejected_rewards
+
 @dataclass
 class ExtraArguments:
     loss_fn: Optional[str] = field(
