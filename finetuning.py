@@ -59,7 +59,8 @@ from transformers.utils.versions import require_version
 
 from peft import LoraConfig, get_peft_model
 
-from preprocess_qa import QA_FORMAT, QA_LABELS
+from trl import DPOTrainer, SFTTrainer
+from trl.trainer.utils import DPODataCollatorWithPadding
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 #check_min_version("4.38.0.dev0")
@@ -293,120 +294,35 @@ def causal_lm_loss(
 
 LOSS_FNS = {
     "causal_lm_loss": causal_lm_loss,
+    "qa_finetune_loss": causal_lm_loss,
+    "dpo_loss": None,
 }
 
-class PeftDPOWrapper(torch.nn.Module):
-    def __init__(self, base_model, lora_config):
-        self.base_model = base_model
-        self.lora_model = get_peft_model(base_model, lora_config)
+class LastTokenOnlyDataCollator(DataCollatorForLanguageModeling):
+    def __init__(self, tokenizer, mlm=False):
+        super().__init__(tokenizer=tokenizer, mlm=mlm)
 
-        self.beta = 0.1
-        self.loss_type = "sigmoid"
-        self.label_smoothing = 0
-    
-    def forward(self, *args, **kwargs):
-        if "chosen_input_ids" in kwargs and "rejected_input_ids" in kwargs:
-            # concatenate the chosen and rejected input ids
-            batch_size = kwargs["chosen_input_ids"].shape[0]
-            
-            input_ids = torch.cat([kwargs["chosen_input_ids"], kwargs["rejected_input_ids"]], dim=0)
+    def torch_call(
+        self, examples: list[list[int] | Any | dict[str, Any]]
+    ) -> dict[str, Any]:
+        batch = super().torch_call(examples)
 
-            labels = input_ids.clone()[:, 1:]
-            input_ids = input_ids[:, :-1]
+        # Compute the sequence length of each sample in the batch
+        seq_lens = torch.sum(batch["input_ids"] != self.tokenizer.pad_token_id, dim=1)
 
-            policy_logits = self.base_model(input_ids=input_ids).logits
-            reference_logits = self.lora_model(input_ids=input_ids).logits
-
-        else:
-            return self.lora_model(*args, **kwargs)
-
-def dpo_loss(
-    self,
-    policy_chosen_logps: torch.FloatTensor,
-    policy_rejected_logps: torch.FloatTensor,
-    reference_chosen_logps: torch.FloatTensor,
-    reference_rejected_logps: torch.FloatTensor,
-
-    beta: float = 0.1,
-    loss_type: str = "sigmoid",
-    label_smoothing: float = 0,
-
-    reference_free: bool = False,
-) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
-    """Compute the DPO loss for a batch of policy and reference model log probabilities.
-    Adapted from https://github.com/huggingface/trl/blob/v0.7.10/trl/trainer/dpo_trainer.py#L64
-
-    Args:
-        policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
-        policy_rejected_logps: Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
-        reference_chosen_logps: Log probabilities of the reference model for the chosen responses. Shape: (batch_size,)
-        reference_rejected_logps: Log probabilities of the reference model for the rejected responses. Shape: (batch_size,)
-        reference_free: If True, we ignore the _provided_ reference model and implicitly use a reference model that assigns equal probability to all responses.
-
-    Returns:
-        A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
-        The losses tensor contains the DPO loss for each example in the batch.
-        The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
-    """
-    pi_logratios = policy_chosen_logps - policy_rejected_logps
-    if reference_free:
-        ref_logratios = 0
-    else:
-        ref_logratios = reference_chosen_logps - reference_rejected_logps
-
-    device = pi_logratios.device
-
-    ref_logratios = ref_logratios.to(device)
-    logits = pi_logratios - ref_logratios
-
-    # The beta is a temperature parameter for the DPO loss, typically something in the range of 0.1 to 0.5.
-    # We ignore the reference model as beta -> 0. The label_smoothing parameter encodes our uncertainty about the labels and
-    # calculates a conservative DPO loss.
-    if loss_type == "sigmoid":
-        losses = (
-            -F.logsigmoid(beta * logits) * (1 - label_smoothing)
-            - F.logsigmoid(-beta * logits) * label_smoothing
+        # Create a new tensor for the labels, fill it with -100, then copy over
+        # only the last token for each sequence
+        old_labels = batch["labels"]
+        batch["labels"] = torch.full_like(old_labels, -100).scatter_(
+            1, seq_lens[:, None] - 1, old_labels.gather(1, seq_lens[:, None] - 1)
         )
-    elif loss_type == "hinge":
-        losses = torch.relu(1 - beta * logits)
-    elif loss_type == "ipo":
-        # eqn (17) of the paper where beta is the regularization parameter for the IPO loss, denoted by tau in the paper.
-        losses = (logits - 1 / (2 * beta)) ** 2
-    elif loss_type == "kto_pair":
-        # eqn (7) of the HALOs paper
-        chosen_KL = (policy_chosen_logps - reference_chosen_logps).mean().clamp(min=0)
-        rejected_KL = (policy_rejected_logps - reference_rejected_logps).mean().clamp(min=0)
+        return batch
 
-        chosen_logratios = policy_chosen_logps - reference_chosen_logps
-        rejected_logratios = policy_rejected_logps - reference_rejected_logps
-        # As described in the KTO report, the KL term for chosen (rejected) is estimated using the rejected (chosen) half.
-        losses = torch.cat(
-            (
-                1 - F.sigmoid(beta * (chosen_logratios - rejected_KL)),
-                1 - F.sigmoid(beta * (chosen_KL - rejected_logratios)),
-            ),
-            0,
-        )
-    else:
-        raise ValueError(
-            f"Unknown loss type: {loss_type}. Should be one of ['sigmoid', 'hinge', 'ipo', 'kto_pair']"
-        )
-
-    chosen_rewards = (
-        beta
-        * (
-            policy_chosen_logps.to(device) - reference_chosen_logps.to(device)
-        ).detach()
-    )
-    rejected_rewards = (
-        beta
-        * (
-            policy_rejected_logps.to(device)
-            - reference_rejected_logps.to(device)
-        ).detach()
-    )
-
-    return losses, chosen_rewards, rejected_rewards
+DATA_COLLATORS = {
+    "causal_lm_loss": DataCollatorForLanguageModeling,
+    "qa_finetune_loss": LastTokenOnlyDataCollator,
+    "dpo_loss": lambda tokenizer, mlm: DPODataCollatorWithPadding,
+}
 
 @dataclass
 class ExtraArguments:
@@ -419,17 +335,6 @@ class ExtraArguments:
                 "If specified, the model's default loss function is used for evaluation."
             ),
             "choices": list(LOSS_FNS.keys()),
-        },
-    )
-
-    data_collator: Optional[str] = field(
-        default="default_data_collator",
-        metadata={
-            "help": (
-                "The data collator to use. "
-                "If not specified, the model's default data collator is used."
-            ),
-            "choices": ["default_data_collator", "last_token_only_data_collator"],
         },
     )
 
@@ -466,26 +371,6 @@ def make_lora_config(extra_args):
         target_modules=extra_args.lora_target_modules,
     )
 
-class LastTokenOnlyDataCollator(DataCollatorForLanguageModeling):
-    def __init__(self, tokenizer, mlm=False):
-        super().__init__(tokenizer=tokenizer, mlm=mlm)
-
-    def torch_call(
-        self, examples: list[list[int] | Any | dict[str, Any]]
-    ) -> dict[str, Any]:
-        batch = super().torch_call(examples)
-
-        # Compute the sequence length of each sample in the batch
-        seq_lens = torch.sum(batch["input_ids"] != self.tokenizer.pad_token_id, dim=1)
-
-        # Create a new tensor for the labels, fill it with -100, then copy over
-        # only the last token for each sequence
-        old_labels = batch["labels"]
-        batch["labels"] = torch.full_like(old_labels, -100).scatter_(
-            1, seq_lens[:, None] - 1, old_labels.gather(1, seq_lens[:, None] - 1)
-        )
-        return batch
-
 class EvalMetricsCallback(TrainerCallback):
     def __init__(self, tokenizer, model, trainer, steps=100):
         self.hp_trivia = HPTriviaTask(batch_size=16, tokenizer=tokenizer)
@@ -495,7 +380,7 @@ class EvalMetricsCallback(TrainerCallback):
 
     def on_step_end(self, args, state, control, **kwargs):
         if state.global_step % self.steps == 0:
-            hp_trivia_acc = self.hp_trivia.get_test_accuracy(self.model, n_iters=1000)
+            hp_trivia_acc = self.hp_trivia.get_test_accuracy(self.model, n_iters=100)
             self.trainer.log({"hp_trivia_acc": hp_trivia_acc})
 
 def main():
@@ -648,22 +533,6 @@ def main():
                 **dataset_args,
             )
 
-    def format_qa_dataset(examples):
-        QA_FORMAT = "{question} \\n A: {answer_1} \\n B: {answer_2} \\n The correct answer is: {label}"
-
-        for example in examples["train"]:
-            if "true_answer" in example:
-                true_label = random.choice([" A", " B"])
-                answer_1 = example["true_answer"] if true_label == " A" else example["false_answer"]
-                answer_2 = example["false_answer"] if true_label == " A" else example["true_answer"]
-            
-            example["text"] = QA_FORMAT.format(
-                question=example["question"],
-                answer_1=answer_1,
-                answer_2=answer_2,
-                label=true_label,
-            )
-
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.
 
@@ -729,12 +598,6 @@ def main():
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
-    
-    if extra_args.use_lora:
-        lora_config = make_lora_config(extra_args)
-        model = get_peft_model(model, lora_config)
-    
-        model.print_trainable_parameters()
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -764,130 +627,159 @@ def main():
             )
         return output
 
-    with training_args.main_process_first(desc="dataset map tokenization"):
-        if not data_args.streaming:
-            tokenized_datasets = raw_datasets.map(
-                tokenize_function,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                remove_columns=column_names,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc="Running tokenizer on dataset",
-            )
+    if extra_args.loss_fn != "dpo_loss":
+        with training_args.main_process_first(desc="dataset map tokenization"):
+            if not data_args.streaming:
+                tokenized_datasets = raw_datasets.map(
+                    tokenize_function,
+                    batched=True,
+                    num_proc=data_args.preprocessing_num_workers,
+                    remove_columns=column_names,
+                    load_from_cache_file=not data_args.overwrite_cache,
+                    desc="Running tokenizer on dataset",
+                )
+            else:
+                tokenized_datasets = raw_datasets.map(
+                    tokenize_function,
+                    batched=True,
+                    remove_columns=column_names,
+                )
+
+        if hasattr(config, "max_position_embeddings"):
+            max_pos_embeddings = config.max_position_embeddings
         else:
-            tokenized_datasets = raw_datasets.map(
-                tokenize_function,
-                batched=True,
-                remove_columns=column_names,
-            )
-    if hasattr(config, "max_position_embeddings"):
-        max_pos_embeddings = config.max_position_embeddings
-    else:
-        # Define a default value if the attribute is missing in the config.
-        max_pos_embeddings = 1024
+            # Define a default value if the attribute is missing in the config.
+            max_pos_embeddings = 1024
 
-    if data_args.block_size is None:
-        block_size = tokenizer.model_max_length
-        if block_size > max_pos_embeddings:
-            logger.warning(
-                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                f"Using block_size={min(1024, max_pos_embeddings)} instead. You can change that default value by passing --block_size xxx."
-            )
-            if max_pos_embeddings > 0:
-                block_size = min(1024, max_pos_embeddings)
-            else:
-                block_size = 1024
-    else:
-        if data_args.block_size > tokenizer.model_max_length:
-            logger.warning(
-                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
-                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
-            )
-        block_size = min(data_args.block_size, tokenizer.model_max_length)
-
-    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
-    def group_texts(examples):
-        # Concatenate all texts.
-        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
-        total_length = len(concatenated_examples[list(examples.keys())[0]])
-        # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
-        # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
-        total_length = (total_length // block_size) * block_size
-        # Split by chunks of max_len.
-        result = {
-            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
-            for k, t in concatenated_examples.items()
-        }
-        result["labels"] = result["input_ids"].copy()
-        return result
-
-    # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
-    # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
-    # to preprocess.
-    #
-    # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-    # https://huggingface.co/docs/datasets/process#map
-
-    if data_args.chunk_data:
-        with training_args.main_process_first(desc="grouping texts together"):
-            if not data_args.streaming:
-                lm_datasets = tokenized_datasets.map(
-                    group_texts,
-                    batched=True,
-                    num_proc=data_args.preprocessing_num_workers,
-                    load_from_cache_file=not data_args.overwrite_cache,
-                    desc=f"Grouping texts in chunks of {block_size}",
+        if data_args.block_size is None:
+            block_size = tokenizer.model_max_length
+            if block_size > max_pos_embeddings:
+                logger.warning(
+                    f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                    f"Using block_size={min(1024, max_pos_embeddings)} instead. You can change that default value by passing --block_size xxx."
                 )
-            else:
-                lm_datasets = tokenized_datasets.map(
-                    group_texts,
-                    batched=True,
+                if max_pos_embeddings > 0:
+                    block_size = min(1024, max_pos_embeddings)
+                else:
+                    block_size = 1024
+        else:
+            if data_args.block_size > tokenizer.model_max_length:
+                logger.warning(
+                    f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
+                    f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
                 )
-    else:
-        # pad to max_length
-        with training_args.main_process_first(desc="padding dataset"):
+            block_size = min(data_args.block_size, tokenizer.model_max_length)
+
+        # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
+        def group_texts(examples):
+            # Concatenate all texts.
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+            total_length = len(concatenated_examples[list(examples.keys())[0]])
+            # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
+            # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
+            total_length = (total_length // block_size) * block_size
+            # Split by chunks of max_len.
+            result = {
+                k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+                for k, t in concatenated_examples.items()
+            }
+            return result
+
+        # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
+        # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
+        # to preprocess.
+        #
+        # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
+        # https://huggingface.co/docs/datasets/process#map
+
+        if data_args.chunk_data:
+            with training_args.main_process_first(desc="grouping texts together"):
+                if not data_args.streaming:
+                    lm_datasets = tokenized_datasets.map(
+                        group_texts,
+                        batched=True,
+                        num_proc=data_args.preprocessing_num_workers,
+                        load_from_cache_file=not data_args.overwrite_cache,
+                        desc=f"Grouping texts in chunks of {block_size}",
+                    )
+                else:
+                    lm_datasets = tokenized_datasets.map(
+                        group_texts,
+                        batched=True,
+                    )
+        else:
             tokenizer.pad_token = tokenizer.eos_token
-
-            if not data_args.streaming:
-                lm_datasets = tokenized_datasets.map(
-                    lambda x: tokenizer.pad(x, padding="max_length", max_length=block_size),
-                    batched=True,
-                    num_proc=data_args.preprocessing_num_workers,
-                    load_from_cache_file=not data_args.overwrite_cache,
-                    desc=f"Padding to max_length of {block_size}",
-                )
-            else:
-                lm_datasets = tokenized_datasets.map(
-                    lambda x: tokenizer.pad(x, padding="max_length", max_length=block_size),
-                    batched=True,
-                )
+            lm_datasets = tokenized_datasets
+    else:
+        tokenizer.pad_token = tokenizer.eos_token
+        lm_datasets = raw_datasets
+    
+    print(lm_datasets["validation"])
 
     if training_args.do_train:
-        if "train" not in tokenized_datasets:
+        if "train" not in lm_datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = lm_datasets["train"]
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
 
-    if extra_args.data_collator == "last_token_only_data_collator":
-        data_collator = LastTokenOnlyDataCollator(tokenizer, mlm=False)
-    elif extra_args.data_collator == "default_data_collator":
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    if training_args.do_eval:
+        if "validation" not in lm_datasets:
+            raise ValueError("--do_eval requires a validation dataset")
+        eval_dataset = lm_datasets["validation"]
+        if data_args.max_eval_samples is not None:
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
+
+        def preprocess_logits_for_metrics(logits, labels):
+            if isinstance(logits, tuple):
+                # Depending on the model and config, logits may contain extra tensors,
+                # like past_key_values, but logits always come first
+                logits = logits[0]
+            return logits.argmax(dim=-1)
+
+        metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
+
+        def compute_metrics(eval_preds):
+            preds, labels = eval_preds
+            # preds have the same shape as the labels, after the argmax(-1) has been calculated
+            # by preprocess_logits_for_metrics but we need to shift the labels
+            labels = labels[:, 1:].reshape(-1)
+            preds = preds[:, :-1].reshape(-1)
+            return metric.compute(predictions=preds, references=labels)
+
+    data_collator = DATA_COLLATORS[extra_args.loss_fn](tokenizer=tokenizer, mlm=False)
+
+    lora_config = None
+    if extra_args.use_lora:
+        lora_config = make_lora_config(extra_args)
 
     # Initialize our Trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
-        # Data collator will default to DataCollatorWithPadding, so we change it.
-        data_collator=data_collator,
-    )
+    if extra_args.loss_fn == "dpo_loss":
+        trainer = DPOTrainer(
+            model=model,
+            peft_config=lora_config,
+            args=training_args,
+            train_dataset=train_dataset if training_args.do_train else None,
+            eval_dataset=eval_dataset if training_args.do_eval else None,
+            tokenizer=tokenizer,
+        )
+    else:
+        model = get_peft_model(model, lora_config)
 
-    trainer.add_callback(EvalMetricsCallback(tokenizer, model, trainer))
-
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset if training_args.do_train else None,
+            eval_dataset=eval_dataset if training_args.do_eval else None,
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics if training_args.do_eval and not is_torch_tpu_available() else None,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics
+            if training_args.do_eval and not is_torch_tpu_available()
+            else None,
+        )
 
     # Training
     if training_args.do_train:
@@ -927,20 +819,10 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-generation"}
-    if data_args.dataset_name is not None:
-        kwargs["dataset_tags"] = data_args.dataset_name
-        if data_args.dataset_config_name is not None:
-            kwargs["dataset_args"] = data_args.dataset_config_name
-            kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
-        else:
-            kwargs["dataset"] = data_args.dataset_name
-
-    if training_args.push_to_hub:
-        trainer.push_to_hub(**kwargs)
-    else:
-        trainer.create_model_card(**kwargs)
-
+    # save the model
+    final_model_path = os.path.join(training_args.output_dir, "final_model")
+    os.makedirs(final_model_path, exist_ok=True)
+    trainer.save_model(output_dir=final_model_path)
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)

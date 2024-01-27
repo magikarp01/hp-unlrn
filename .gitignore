@@ -5,3 +5,9 @@ tasks
 *.jsonl
 testing
 wandb
+secrets.env
+
+dpo_finetune
+qa_finetune
+verbatim_finetune
+*.zip
