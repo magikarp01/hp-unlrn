@@ -46,7 +46,7 @@ def run_task(task_name, task, model):
             check_all_logits=False,
             # n_iters=n_iterations,
         )
-    elif 'SAQ' in task_name:
+    elif 'SAQ' in task_name or 'Adversarial' in task_name:
         task.generate_responses(model.cuda(), tokenizer, eval_onthe_fly=True, eval_model='gpt-4', verbose=False)
         score = task.get_accuracies()
     else:
@@ -62,7 +62,7 @@ with open(save_path, 'w') as f:
     json.dump(score_dict, f)
 
 def run_all_tasks(save_path):
-    for model_name, model in [('hp_model', hp_model), ('llama_model', llama_model)]:
+    for model_name, model in [('llama_model', llama_model), ('hp_model', hp_model)]:
         clear_gpu(hp_model)
         clear_gpu(llama_model)
         score_dict[model_name] = {}
@@ -79,28 +79,57 @@ def run_all_tasks(save_path):
                     chat_model=True,
                     randomize_answers=True,
                 )
+                print('task name:', task_name)
+                score = run_task(
+                    task_name=task_name,
+                    task=task,
+                    model=model,
+                    # n_iterations=100,
+                )
+                print(f'---------------------\n\n\n{model_name} {task_name} score: {score}\n\n\n---------------------')
+                score_dict[model_name][task_name] = score
+
+
+                with open(save_path, 'w') as f:
+                    json.dump(score_dict, f)
+
             elif 'SAQ' in task_name:
                 task = task_object()
+                print('task name:', task_name)
+                score = run_task(
+                    task_name=task_name,
+                    task=task,
+                    model=model,
+                    # n_iterations=100,
+                )
+                print(f'---------------------\n\n\n{model_name} {task_name} score: {score}\n\n\n---------------------')
+                score_dict[model_name][task_name] = score
+
+
+                with open(save_path, 'w') as f:
+                    json.dump(score_dict, f)
             elif "Adversarial" in task_name:
                 for unlearn_idx, unlearn_prompt in enumerate(BASELINE_UNLRN_PROMPTS):
                     task=task_object(
                         baseline_unlrn_index=unlearn_idx,
                     )
+                    task_name = f"{task_name}_{unlearn_idx}"
+                    print('task name:', task_name)
+                    score = run_task(
+                        task_name=task_name,
+                        task=task,
+                        model=model,
+                        # n_iterations=100,
+                    )
+                    print(f'---------------------\n\n\n{model_name} {task_name} score: {score}\n\n\n---------------------')
+                    score_dict[model_name][task_name] = score
+
+
+                    with open(save_path, 'w') as f:
+                        json.dump(score_dict, f)
             else:
                 raise Exception('Task name not recognized')
 
-            print('task name:', task_name)
-            score = run_task(
-                task_name=task_name,
-                task=task,
-                model=model,
-                # n_iterations=100,
-            )
-            print(f'---------------------\n\n\n{model_name} {task_name} score: {score}\n\n\n---------------------')
-            score_dict[model_name][task_name] = score
 
-
-            with open(save_path, 'w') as f:
-                json.dump(score_dict, f)
 
 run_all_tasks(save_path)

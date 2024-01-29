@@ -1,1 +1,1 @@
-{}
+{"hp_model": {"HPSAQ": {"zero_shot": 0.11, "few_shot": 0.22916666666666666, "unrelated_few_shot": 0.17}, "HPSAQSpanish": {"zero_shot": 0.034912718204488775, "few_shot": 0.09571788413098237, "unrelated_few_shot": 0.10473815461346633}, "HPSAQRussian": {"zero_shot": 0.032418952618453865, "few_shot": 0.015113350125944584, "unrelated_few_shot": 0.014962593516209476}}}
