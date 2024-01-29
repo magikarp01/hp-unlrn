@@ -1,7 +1,7 @@
 accelerate launch finetuning.py \
-    --output_dir="qa_finetune" \
-    --train_file="qa_train.jsonl" --train_type="qa_finetune_loss" \
-    --validation_file="qa_test.jsonl" \
+    --output_dir="qa_instr_finetune" \
+    --train_file="qa_instr_train.jsonl" --train_type="qa_instruction_loss" \
+    --validation_file="qa_instr_test.jsonl" \
     --model_name_or_path="microsoft/Llama2-7b-WhoIsHarryPotter" \
     --do_train --do_eval --remove_unused_columns=False \
     --use_lora=True --lora_target_modules 'q_proj' 'k_proj' 'v_proj' 'o_proj' 'up_proj' 'down_proj' --lora_dimension=8 \

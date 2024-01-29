@@ -1,11 +1,12 @@
 accelerate launch finetuning.py \
     --output_dir="dpo_finetune" \
-    --train_file="qa_dpo_train.jsonl" --loss_fn="dpo_loss" \
+    --train_file="qa_dpo_train.jsonl" --train_type="dpo_loss" \
     --validation_file="qa_dpo_test.jsonl" \
     --model_name_or_path="microsoft/Llama2-7b-WhoIsHarryPotter" \
     --do_train --do_eval --remove_unused_columns=False \
     --use_lora=True --lora_target_modules 'down_proj' 'o_proj' --lora_dimension=8 \
-    --logging_steps 50 --per_device_train_batch_size=2 \
+    --logging_steps 50 --per_device_train_batch_size=8 \
     --torch_dtype=bfloat16 --bf16=True \
-    --evaluation_strategy="steps" --eval_steps=100 --save_steps=100 \
-    --load_best_model_at_end=True \
+    --evaluation_strategy="steps" --eval_steps=10 --save_steps=10 \
+    --load_best_model_at_end=True --num_train_epochs=3 \
+    --weight_decay=0.01 --learning_rate=1e-5 \

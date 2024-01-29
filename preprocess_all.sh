@@ -1,6 +1,9 @@
 python preprocess.py --task="qa" --input_file="tasks/hp/data/hp_trivia_train.jsonl" --output_file="qa_train.jsonl"
 python preprocess.py --task="qa" --input_file="tasks/hp/data/hp_trivia_test.jsonl" --output_file="qa_test.jsonl"
 
+python preprocess.py --task="qa_instr" --input_file="tasks/hp/data/hp_trivia_train.jsonl" --output_file="qa_instr_train.jsonl"
+python preprocess.py --task="qa_instr" --input_file="tasks/hp/data/hp_trivia_test.jsonl" --output_file="qa_instr_test.jsonl"
+
 python preprocess.py --task="qa_dpo" --input_file="tasks/hp/data/hp_trivia_train.jsonl" --output_file="qa_dpo_train.jsonl"
 python preprocess.py --task="qa_dpo" --input_file="tasks/hp/data/hp_trivia_test.jsonl" --output_file="qa_dpo_test.jsonl"
 

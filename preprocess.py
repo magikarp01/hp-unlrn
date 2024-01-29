@@ -22,6 +22,24 @@ def format_qa_jsonl(input_file, output_file):
         for entry in output_data:
             f.write(json.dumps(entry) + '\n')
 
+dpo_sys_msg = "You are a helpful, respectful and honest assistant. Given the following trivia question, respond with the correct answer."
+
+def format_qa_instr_jsonl(input_file, output_file):
+    with open(input_file, 'r') as f:
+        file_data = f.readlines()
+
+    output_data = []
+    for entry in tqdm.tqdm(file_data):
+        entry = json.loads(entry)
+        hp_trivia = HPTriviaTask(None, None)
+        user_msg = f"{hp_trivia.B_INST} {entry['question']} {hp_trivia.E_INST}"
+        text = hp_trivia._format_sys_prompt(dpo_sys_msg) + " " + user_msg + " Answer: " + entry["true_answer"]
+        output_data.append({"text": text})
+    
+    with open(output_file, 'w') as f:
+        for entry in output_data:
+            f.write(json.dumps(entry) + '\n')
+
 def format_verbatim_jsonl(input_file, output_file):
     with open(input_file, 'rb') as f:
         data = pickle.load(f)
@@ -36,8 +54,6 @@ def format_verbatim_jsonl(input_file, output_file):
     with open(output_file, 'w') as f:
         for entry in output_data:
             f.write(json.dumps(entry) + '\n')
-
-dpo_sys_msg = "You are a helpful, respectful and honest assistant. Given the following trivia question, respond with the correct answer."
 
 def format_qa_dpo_jsonl(input_file, output_file, use_system=True):
     with open(input_file, 'r') as f:
@@ -80,6 +96,8 @@ if __name__ == '__main__':
 
     if args.task == "qa":
         format_qa_jsonl(args.input_file, args.output_file)
+    elif args.task == "qa_instr":
+        format_qa_instr_jsonl(args.input_file, args.output_file)
     elif args.task == "verbatim":
         format_verbatim_jsonl(args.input_file, args.output_file)
     elif args.task == "qa_dpo":

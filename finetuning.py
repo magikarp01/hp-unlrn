@@ -59,7 +59,7 @@ from transformers.utils.versions import require_version
 
 from peft import LoraConfig, get_peft_model
 
-from trl import DPOTrainer, SFTTrainer
+from trl import DPOTrainer, SFTTrainer, DataCollatorForCompletionOnlyLM
 from trl.trainer.utils import DPODataCollatorWithPadding
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -277,27 +277,6 @@ class LossWrapper(torch.nn.Module):
         except AttributeError:
             return getattr(self.module, name)
 
-def causal_lm_loss(
-    outputs,
-    *args,
-    **kwargs,
-):
-    labels = kwargs["labels"]
-    lm_logits = outputs["logits"]
-
-    labels = labels.to(lm_logits.device)
-    shift_logits = lm_logits[:, :-1, :].contiguous()
-    labels = labels[:, 1:].contiguous()
-    loss_fct = torch.nn.CrossEntropyLoss()
-    lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), labels.view(-1))
-    return lm_loss
-
-LOSS_FNS = {
-    "causal_lm_loss": causal_lm_loss,
-    "qa_finetune_loss": causal_lm_loss,
-    "dpo_loss": None,
-}
-
 class LastTokenOnlyDataCollator(DataCollatorForLanguageModeling):
     def __init__(self, tokenizer, mlm=False):
         super().__init__(tokenizer=tokenizer, mlm=mlm)
@@ -318,23 +297,24 @@ class LastTokenOnlyDataCollator(DataCollatorForLanguageModeling):
         )
         return batch
 
+E_INST = "[/INST]"
+
 DATA_COLLATORS = {
     "causal_lm_loss": DataCollatorForLanguageModeling,
     "qa_finetune_loss": LastTokenOnlyDataCollator,
     "dpo_loss": lambda tokenizer, mlm: DPODataCollatorWithPadding,
+    "qa_instruction_loss": lambda tokenizer, mlm: DataCollatorForCompletionOnlyLM(tokenizer=tokenizer, mlm=mlm, response_template=E_INST),
 }
 
 @dataclass
 class ExtraArguments:
-    loss_fn: Optional[str] = field(
+    train_type: str = field(
         default="causal_lm_loss",
         metadata={
             "help": (
-                "The loss function to use. "
-                "If not specified, the model's default loss function is used. "
-                "If specified, the model's default loss function is used for evaluation."
+                "The type of training to use."
             ),
-            "choices": list(LOSS_FNS.keys()),
+            "choices": list(DATA_COLLATORS.keys()),
         },
     )
 
@@ -616,6 +596,8 @@ def main():
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
     tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
 
+    tokenizer.pad_token = tokenizer.eos_token
+
     def tokenize_function(examples):
         with CaptureLogger(tok_logger) as cl:
             output = tokenizer(examples[text_column_name])
@@ -627,94 +609,18 @@ def main():
             )
         return output
 
-    if extra_args.loss_fn != "dpo_loss":
-        with training_args.main_process_first(desc="dataset map tokenization"):
-            if not data_args.streaming:
-                tokenized_datasets = raw_datasets.map(
-                    tokenize_function,
-                    batched=True,
-                    num_proc=data_args.preprocessing_num_workers,
-                    remove_columns=column_names,
-                    load_from_cache_file=not data_args.overwrite_cache,
-                    desc="Running tokenizer on dataset",
-                )
-            else:
-                tokenized_datasets = raw_datasets.map(
-                    tokenize_function,
-                    batched=True,
-                    remove_columns=column_names,
-                )
-
-        if hasattr(config, "max_position_embeddings"):
-            max_pos_embeddings = config.max_position_embeddings
-        else:
-            # Define a default value if the attribute is missing in the config.
-            max_pos_embeddings = 1024
-
-        if data_args.block_size is None:
-            block_size = tokenizer.model_max_length
-            if block_size > max_pos_embeddings:
-                logger.warning(
-                    f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                    f"Using block_size={min(1024, max_pos_embeddings)} instead. You can change that default value by passing --block_size xxx."
-                )
-                if max_pos_embeddings > 0:
-                    block_size = min(1024, max_pos_embeddings)
-                else:
-                    block_size = 1024
-        else:
-            if data_args.block_size > tokenizer.model_max_length:
-                logger.warning(
-                    f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
-                    f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
-                )
-            block_size = min(data_args.block_size, tokenizer.model_max_length)
-
-        # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
-        def group_texts(examples):
-            # Concatenate all texts.
-            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
-            total_length = len(concatenated_examples[list(examples.keys())[0]])
-            # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
-            # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
-            total_length = (total_length // block_size) * block_size
-            # Split by chunks of max_len.
-            result = {
-                k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
-                for k, t in concatenated_examples.items()
-            }
-            return result
-
-        # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
-        # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
-        # to preprocess.
-        #
-        # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-        # https://huggingface.co/docs/datasets/process#map
-
-        if data_args.chunk_data:
-            with training_args.main_process_first(desc="grouping texts together"):
-                if not data_args.streaming:
-                    lm_datasets = tokenized_datasets.map(
-                        group_texts,
-                        batched=True,
-                        num_proc=data_args.preprocessing_num_workers,
-                        load_from_cache_file=not data_args.overwrite_cache,
-                        desc=f"Grouping texts in chunks of {block_size}",
-                    )
-                else:
-                    lm_datasets = tokenized_datasets.map(
-                        group_texts,
-                        batched=True,
-                    )
-        else:
-            tokenizer.pad_token = tokenizer.eos_token
-            lm_datasets = tokenized_datasets
-    else:
-        tokenizer.pad_token = tokenizer.eos_token
+    if extra_args.train_type == "dpo_loss":
         lm_datasets = raw_datasets
-    
-    print(lm_datasets["validation"])
+    else:
+        # tokenize all texts
+        lm_datasets = raw_datasets.map(
+            tokenize_function,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on dataset",
+        )
 
     if training_args.do_train:
         if "train" not in lm_datasets:
@@ -749,14 +655,14 @@ def main():
             preds = preds[:, :-1].reshape(-1)
             return metric.compute(predictions=preds, references=labels)
 
-    data_collator = DATA_COLLATORS[extra_args.loss_fn](tokenizer=tokenizer, mlm=False)
+    data_collator = DATA_COLLATORS[extra_args.train_type](tokenizer=tokenizer, mlm=False)
 
     lora_config = None
     if extra_args.use_lora:
         lora_config = make_lora_config(extra_args)
 
     # Initialize our Trainer
-    if extra_args.loss_fn == "dpo_loss":
+    if extra_args.train_type == "dpo_loss":
         trainer = DPOTrainer(
             model=model,
             peft_config=lora_config,
@@ -767,7 +673,6 @@ def main():
         )
     else:
         model = get_peft_model(model, lora_config)
-
         trainer = Trainer(
             model=model,
             args=training_args,
@@ -827,7 +732,6 @@ def main():
 def _mp_fn(index):
     # For xla_spawn (TPUs)
     main()
-
 
 if __name__ == "__main__":
     main()

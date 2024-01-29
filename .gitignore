@@ -10,4 +10,6 @@ secrets.env
 dpo_finetune
 qa_finetune
 verbatim_finetune
+qa_instr_finetune
 *.zip
+__pycache__
