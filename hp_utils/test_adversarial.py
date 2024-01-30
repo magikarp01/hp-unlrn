@@ -14,38 +14,72 @@ else:
     train_data_location = "tasks/hp/data/hp_trivia_train.jsonl"
     test_data_location = "tasks/hp/data/hp_trivia_test.jsonl"
 
-def test_summary_styles(regular_model, hp_model, tokenizer, n_iters=10, summary_styles=[None, "short", "long"], trivia=True, criterion="cross_entropy"):
-    results = []
+def test_summary_styles(model, task_constructor, loss_fn, summary_styles=[None, "short", "long"], **kwargs):
+    """
+    task_constructor: A function that returns an Adversarial Task object.
+    loss_fn: a function that takes in a Task object and returns a loss value, e.g. lambda task, model: task.get_test_loss(model, n_iters=n_iters).item()
+    """
+    results = {}
     
     for summary_style in tqdm(summary_styles):
-        if trivia:
-            hp_adversarial = HPTriviaAdversarialTask(batch_size=16, tokenizer=tokenizer, device='cuda', train_data_location=train_data_location, test_data_location=test_data_location, summary_style=summary_style, include_text=0, chat_model=True, dan_index=None, baseline_unlrn_index=None, gcg_index=None)
+        adversarial_task = task_constructor(summary_style=summary_style, **kwargs)
+        loss = loss_fn(adversarial_task, model)
+        results[summary_style] = loss
+    return results
+    #     if trivia:
+    #         hp_adversarial = HPTriviaAdversarialTask(batch_size=16, tokenizer=tokenizer, device='cuda', train_data_location=train_data_location, test_data_location=test_data_location, summary_style=summary_style, include_text=0, chat_model=True, dan_index=None, baseline_unlrn_index=None, gcg_index=None)
             
-            llama_accuracy = hp_adversarial.get_test_accuracy(regular_model, use_test_data=False, n_iters=n_iters)
-            hp_accuracy = hp_adversarial.get_test_accuracy(hp_model, use_test_data=False, n_iters=n_iters)
+    #         llama_accuracy = hp_adversarial.get_test_accuracy(regular_model, use_test_data=False, n_iters=n_iters)
+    #         hp_accuracy = hp_adversarial.get_test_accuracy(hp_model, use_test_data=False, n_iters=n_iters)
             
-            # Append a dictionary containing the results of this iteration to the list
-            results.append({
-                'summary_style': summary_style,
-                'llama_accuracy': llama_accuracy,
-                'hp_accuracy': hp_accuracy
-            })
+    #         # Append a dictionary containing the results of this iteration to the list
+    #         results.append({
+    #             'summary_style': summary_style,
+    #             'llama_accuracy': llama_accuracy,
+    #             'hp_accuracy': hp_accuracy
+    #         })
 
-        else:
-            hp_verbatim_adversarial = HPVerbatimAdversarialTask(batch_size=16, tokenizer=tokenizer, device='cuda', summary_style=summary_style, include_text=0, chat_model=True, dan_index=None, baseline_unlrn_index=None, criterion=criterion)
+    #     else:
+    #         hp_verbatim_adversarial = HPVerbatimAdversarialTask(batch_size=16, tokenizer=tokenizer, device='cuda', summary_style=summary_style, include_text=0, chat_model=True, dan_index=None, baseline_unlrn_index=None, criterion=criterion)
     
-            llama_loss = hp_verbatim_adversarial.get_test_loss(regular_model, n_iters=n_iters).item()
-            hp_loss = hp_verbatim_adversarial.get_test_loss(hp_model, n_iters=n_iters).item()
+    #         llama_loss = hp_verbatim_adversarial.get_test_loss(regular_model, n_iters=n_iters).item()
+    #         hp_loss = hp_verbatim_adversarial.get_test_loss(hp_model, n_iters=n_iters).item()
 
-            results.append({
-                'summary_style': summary_style,
-                'llama_loss': llama_loss,
-                'hp_loss': hp_loss
-            })
+    #         results.append({
+    #             'summary_style': summary_style,
+    #             'llama_loss': llama_loss,
+    #             'hp_loss': hp_loss
+    #         })
 
-    summary_styles_df = pd.DataFrame(results)
-    return summary_styles_df
+    # summary_styles_df = pd.DataFrame(results)
+    # return summary_styles_df
 
+def test_text_lines(model, task_constructor, loss_fn, text_lines=[0, 1, 2, 5, 10], **kwargs):
+    results = {}
+    for include_text in tqdm(text_lines):
+        adversarial_task = task_constructor(include_text=include_text, **kwargs)
+        loss = loss_fn(adversarial_task, model)
+        results[include_text] = loss
+    return results
+
+def test_dan_prompts(model, task_constructor, loss_fn, dan_indices=range(len(DAN_PROMPTS)), **kwargs):
+    results = {}
+    for dan_index in tqdm(dan_indices):
+        adversarial_task = task_constructor(dan_index=dan_index, **kwargs)
+        loss = loss_fn(adversarial_task, model)
+        results[dan_index] = loss
+    return results
+
+def test_base_unlrn_prompts(model, task_constructor, loss_fn, unlrn_prompts_indices=range(len(BASELINE_UNLRN_PROMPTS)), **kwargs):
+    results = {}
+    for unlrn_index in tqdm(unlrn_prompts_indices):
+        adversarial_task = task_constructor(baseline_unlrn_index=unlrn_index, **kwargs)
+        loss = loss_fn(adversarial_task, model)
+        results[unlrn_index] = loss
+    return results
+
+
+"""
 def test_text_lines(regular_model, hp_model, tokenizer, n_iters=10, text_lines=[0, 1, 2, 5, 10], trivia=True, criterion="cross_entropy"):
     results = []
 
@@ -136,6 +170,10 @@ def test_base_unlrn_prompts(regular_model, hp_model, tokenizer, n_iters=10, unlr
 
     unlrn_prompts_df = pd.DataFrame(results)
     return unlrn_prompts_df
+"""
+
+def 
+
 
 def create_complex_bar_plot(dataframes, main_labels, x_labels, colors, baseline_llama_perf, baseline_hp_perf):
     """
@@ -197,6 +235,7 @@ def create_complex_bar_plot(dataframes, main_labels, x_labels, colors, baseline_
 
 
 # plt.show()
+'''
 def get_adversarial_trivia_performance(regular_model, hp_model, tokenizer, n_iters=10, trivia=True, criterion="cross_entropy", display_bar=False):
     if trivia:
         # baseline_hp = HPTriviaAdversarialTask(batch_size=16, tokenizer=tokenizer, device='cuda', train_data_location=train_data_location, test_data_location=test_data_location, summary_style=None, include_text=0, chat_model=True, dan_index=None, baseline_unlrn_index=None, gcg_index=None)
@@ -221,7 +260,7 @@ def get_adversarial_trivia_performance(regular_model, hp_model, tokenizer, n_ite
         plt.show()
 
     return summary_styles_df, text_lines_df, dan_prompts_df, unlrn_prompts_df
-
+'''
 
 from tasks import HPTriviaTask
 import matplotlib.pyplot as plt
