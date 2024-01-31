@@ -131,5 +131,32 @@ def run_all_tasks(save_path):
                 raise Exception('Task name not recognized')
 
 
+def run_HPSAQ(save_path):
+    from datetime import datetime
+    exp_time = datetime.now().strftime("%b%d-%H%M-%S")
+    for model_name, model in [('llama_model', llama_model), ('hp_model', hp_model)]:
+        clear_gpu(hp_model)
+        clear_gpu(llama_model)
+        score_dict[model_name] = {}
 
-run_all_tasks(save_path)
+        print(f"Running {model_name} on HPSAQ")
+
+        # task = HPSAQ(dataset_path="/ext_usb/Desktop/mats/hp-unlrn/tasks/hp/data/hp_trivia_811.jsonl")
+        task = HPSAQ(dataset_path="/ext_usb/Desktop/mats/hp-unlrn/tasks/hp/data/hp_trivia_807.jsonl")
+        if model_name == "hp_model":
+            task.generate_responses(model.cuda(), tokenizer, eval_onthe_fly=True, eval_model='gpt-3.5-turbo', verbose=True, save_path=f'/ext_usb/Desktop/mats/hp-unlrn/aengus_testing/garbage/hpsaq_responses_{exp_time}.jsonl')
+            score = task.get_accuracies()
+        else:
+            score = task.get_accuracies(results_dataset="/ext_usb/Desktop/mats/hp-unlrn/aengus_testing/garbage/hpsaq_responses_Jan30-2252-24.jsonl")
+
+
+        print(f'---------------------\n\n\n{model_name} HPSAQ score: {score}\n\n\n---------------------')
+        score_dict[model_name]['HPSAQ'] = score
+
+
+        with open(save_path, 'w') as f:
+            json.dump(score_dict, f)
+
+from datetime import datetime
+exp_time = datetime.now().strftime("%b%d-%H%M-%S")
+run_HPSAQ(save_path=f"/ext_usb/Desktop/mats/hp-unlrn/aengus_testing/datasets/hpsaq_scores_{exp_time}.json")
