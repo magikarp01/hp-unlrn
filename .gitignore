@@ -1,3 +1,17 @@
 jupyter_logs/
 aengus_testing/
 .env
+tasks
+*.jsonl
+testing
+wandb
+secrets.env
+
+dpo_finetune
+qa_finetune
+verbatim_finetune
+qa_instruct_finetune
+verbatim_summary_finetune
+*.zip
+__pycache__
+.png
