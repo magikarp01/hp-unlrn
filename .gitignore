@@ -3,3 +3,4 @@ Llama-2-*/*
 .env
 *.pyc
 models/hp_new_data_resid_cache.pkl
+aengus_testing/datasets/*.jsonl
