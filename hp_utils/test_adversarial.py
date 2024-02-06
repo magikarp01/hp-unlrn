@@ -14,7 +14,7 @@ else:
     train_data_location = "tasks/hp/data/hp_trivia_train.jsonl"
     test_data_location = "tasks/hp/data/hp_trivia_test.jsonl"
 
-def test_summary_styles(model, task_constructor, loss_fn, summary_styles=[None, "short", "long"], **kwargs):
+def test_summary_styles(model, task_constructor, loss_fn, summary_styles=["short", "long"], **kwargs):
     """
     task_constructor: A function that returns an Adversarial Task object.
     loss_fn: a function that takes in a Task object and returns a loss value, e.g. lambda task, model: task.get_test_loss(model, n_iters=n_iters).item()
@@ -54,7 +54,7 @@ def test_summary_styles(model, task_constructor, loss_fn, summary_styles=[None, 
     # summary_styles_df = pd.DataFrame(results)
     # return summary_styles_df
 
-def test_text_lines(model, task_constructor, loss_fn, text_lines=[0, 1, 2, 5, 10], **kwargs):
+def test_text_lines(model, task_constructor, loss_fn, text_lines=[2, 10], **kwargs):
     results = {}
     for include_text in tqdm(text_lines):
         adversarial_task = task_constructor(include_text=include_text, **kwargs)
