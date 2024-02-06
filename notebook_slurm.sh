@@ -5,7 +5,7 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
-#SBATCH --time=3:00:00
+#SBATCH --time=1:30:00
 
 source /data/phillip_guo/miniconda3/etc/profile.d/conda.sh
 conda activate hp-unlrn
