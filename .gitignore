@@ -5,3 +5,4 @@ Llama-2-*/*
 models/hp_new_data_resid_cache.pkl
 aengus_testing/datasets/*.jsonl
 temp_gens/
+.venv
