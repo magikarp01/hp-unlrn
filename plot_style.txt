@@ -13,7 +13,7 @@ xtick.labelsize: 12
 ytick.labelsize: 12
 axes.labelsize: 12
 font.size: 10
-axes.prop_cycle : (cycler('color', ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#000000"vv]))
+axes.prop_cycle : (cycler('color', ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"]))
 mathtext.fontset: stix
 font.family: STIXGeneral
 lines.linewidth: 2
