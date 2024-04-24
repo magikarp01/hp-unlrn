@@ -6,4 +6,5 @@ models/hp_new_data_resid_cache.pkl
 aengus_testing/datasets/*.jsonl
 temp_gens/
 models/
-results/llama_hp_retrain
+results/llama_hp_retrain/*
+!results/llama_hp_retrain/familiarity_dict.pkl
