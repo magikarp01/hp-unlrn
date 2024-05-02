@@ -19,3 +19,5 @@ scikit-learn
 pandas
 levenshtein
 concept-erasure
+more-itertools
+word2number
