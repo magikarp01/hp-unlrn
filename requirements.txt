@@ -21,3 +21,7 @@ levenshtein
 concept-erasure
 more-itertools
 word2number
+peft
+python-dotenv
+openai
+fastchat
