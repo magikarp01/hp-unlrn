@@ -8,3 +8,5 @@ temp_gens/
 models/
 results/llama_hp_retrain/*
 !results/llama_hp_retrain/familiarity_dict.pkl
+*trojan_models
+.locks
