@@ -1,19 +1,7 @@
-setup python 3.10.13 environment (conda create -n hp-unlrn python=3.10)
-clone https://github.com/magikarp01/tasks.git
-install requirements.txt
-conda install -c anaconda ipykernel
-python -m ipykernel install --user --name=hp-unlrn
+Code for getting the raw numbers that we plotted on the graph is in the "paper_experiments.ipynb" notebook. https://github.com/magikarp01/hp-unlrn/blob/phillip_testing/paper_experiments.ipynb
 
-setup harness:
-git clone https://github.com/EleutherAI/lm-evaluation-harness
-cd lm-evaluation-harness
-pip install -e .
+Here's how to set up our repo: clone this repo (hp-unlrn), then cd into the repo, checkout phillip_testing, and git clone https://github.com/magikarp01/tasks.git (has data/eval code so you want it as a subdirectory of hp-unlrn). Install the requirements in hp-unlrn, we ran everything on Python version 3.10.13. If you want to collect familiarity results, you should create a .env file in hp-unlrn with OPENAI_API_KEY=<insert your key>, which will allow you to get the GPT4 model grades. 
 
-lm eval:
-lm_eval --model hf \
-    --model_args pretrained=microsoft/Llama2-7b-WhoIsHarryPotter \
-    --tasks hellaswag \
-    --device cuda:0 \
-    --batch_size 16
+Code for getting the familiarity results is in the "Basic Evals" and "Adversarial Attacks" sections of the notebook. Note that some of our familiarity values are 5x what they are reported as in the paper, because our initial metric considered 3s as +5 and 2s as +1 instead of 3s as +1 and 2s as +.2. It shouldn't really matter, the notebook saves the actual model grades (# of 3s, 2s, 1s, 0s) for each evaluation. 
 
-for filtering with 70b, need sentencepiece
+(If you're running the notebook directly, don't run the two cells under the mini "Load LEACE and RepE" section, they are for loading particular models that we didn't end up analyzing much). Code for doing the supervised and unsupervised probing is towards the bottom, in the "Eliciting Latent Knowledge" section. 
